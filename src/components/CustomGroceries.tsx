@@ -121,66 +121,60 @@ function CustomGroceries({
 
     <div style={{ marginTop: 40 }}>
 
-      <input
-        ref={nameInputRef}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Naam"
-      />
+      <div className="grocery-add-form">
+        <input
+          ref={nameInputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Naam"
+        />
 
-      <input
-        type="number"
-        value={amount}
-        onChange={(e) => setAmount(Number(e.target.value))}
-        style={{ width: 60, marginLeft: 10 }}
-      />
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(Number(e.target.value))}
+          className="grocery-add-amount"
+        />
 
-      <select
-        value={unit}
-        onChange={(e) => setUnit(e.target.value)}
-        style={{ marginLeft: 10 }}
-      >
-        <option value="stuk">stuk</option>
-        <option value="mg">mg</option>
-        <option value="g">g</option>
-        <option value="kg">kg</option>
-        <option value="ml">ml</option>
-        <option value="l">l</option>
-        <option value="el">el</option>
-        <option value="tl">tl</option>
-        <option value="zak">zak</option>
-        <option value="klein">klein</option>
-        <option value="groot">groot</option>
-      </select>
+        <select
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+        >
+          <option value="stuk">stuk</option>
+          <option value="mg">mg</option>
+          <option value="g">g</option>
+          <option value="kg">kg</option>
+          <option value="ml">ml</option>
+          <option value="l">l</option>
+          <option value="el">el</option>
+          <option value="tl">tl</option>
+          <option value="zak">zak</option>
+          <option value="klein">klein</option>
+          <option value="groot">groot</option>
+        </select>
 
-      <select
-  value={shelf}
-  onChange={(e) => setShelf(e.target.value)}
-  style={{ marginLeft: 10 }}
->
+        <select
+          value={shelf}
+          onChange={(e) => setShelf(e.target.value)}
+        >
+          {SHELVES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
 
-{SHELVES.map((s) => (
-  <option key={s} value={s}>
-    {s}
-  </option>
-))}
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="Categorie"
+          list="grocery-categories"
+        />
 
-</select>
-
-      <input
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        placeholder="Categorie"
-        list="grocery-categories"
-        style={{ marginLeft: 10 }}
-      />
-
-      <button
-        style={{ marginLeft: 10 }}
-        onClick={handleAdd}
-      >
-        toevoegen
-      </button>
+        <button onClick={handleAdd}>
+          toevoegen
+        </button>
+      </div>
 
       <datalist id="grocery-categories">
         {existingCategories.map((existingCategory) => (

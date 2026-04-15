@@ -68,136 +68,133 @@ function IngredientEditor({
 }
 
   return (
-    <div style={{ marginTop: 40 }}>
+    <div className="ingredient-editor">
       
       <h3>Boodschappen voor</h3>
 
-<input
-  type="number"
-  min={1}
-  value={servingsOverride[recipe.id] ?? recipe.servings}
-  onChange={(e) =>
-    updateRecipeServings(
-      recipe.id,
-      Math.max(1, Number(e.target.value))
-    )
-  }
-  style={{ width: 60 }}
-/>
+      <div className="ingredient-servings-row">
+        <input
+          type="number"
+          min={1}
+          value={servingsOverride[recipe.id] ?? recipe.servings}
+          onChange={(e) =>
+            updateRecipeServings(
+              recipe.id,
+              Math.max(1, Number(e.target.value))
+            )
+          }
+        />
 
+        <span>personen</span>
+      </div>
 
+      <div className="ingredient-help-text">
+        Dit aantal bepaalt hoeveel er op de boodschappenlijst komt.
+      </div>
 
-<span style={{ marginLeft: 6 }}>
-  personen
-</span>
+      <h3>Overige benodigdheden</h3>
 
-<div style={{ marginTop: 6, marginBottom: 16, fontSize: 12 }}>
-  Dit aantal bepaalt hoeveel er op de boodschappenlijst komt.
-</div>
-
-<h3>Overige benodigdheden</h3>
-
-<textarea
-  value={recipe.notes ?? ""}
-  onChange={(e) =>
-    updateRecipeNotes(recipe.id, e.target.value)
-  }
-  placeholder="bijv: olijfolie, zout, peper, komijn"
-  rows={3}
-  style={{ width: "100%", marginBottom: 10 }}
-/>
-
-      <input
-        ref={nameInputRef}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Ingrediënt"
+      <textarea
+        value={recipe.notes ?? ""}
+        onChange={(e) =>
+          updateRecipeNotes(recipe.id, e.target.value)
+        }
+        placeholder="bijv: olijfolie, zout, peper, komijn"
+        rows={3}
+        className="ingredient-notes"
       />
 
-      <input
-        type="text"
-        inputMode="decimal"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        style={{ width: 60, marginLeft: 10 }}
-      />
+      <div className="ingredient-add-form">
+        <input
+          ref={nameInputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ingrediënt"
+        />
 
-      <select
-        value={unit}
-        onChange={(e) => setUnit(e.target.value)}
-        style={{ marginLeft: 10 }}
-      >
-        <option value="stuk">stuk</option>
-        <option value="mg">mg</option>
-        <option value="g">g</option>
-        <option value="kg">kg</option>
-        <option value="ml">ml</option>
-        <option value="liter">liter</option>
-        <option value="el">el</option>
-        <option value="tl">tl</option>
-        <option value="zak">zak</option>
-        <option value="klein">klein</option>
-        <option value="groot">groot</option>
-      </select>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="ingredient-amount-input"
+        />
 
-      <select
-  value={shelf}
-  onChange={(e) => setShelf(e.target.value)}
-  style={{ marginLeft: 10 }}
->
-
-{SHELVES.map((s) => (
-  <option key={s} value={s}>
-    {s}
-  </option>
-))}
-
-</select>
-
-      <button onClick={handleAdd} style={{ marginLeft: 10 }}>
-        Toevoegen
-      </button>
-
-      <ul>
-  {recipe.ingredients.map((ingredient) => (
-    <li key={ingredient.id}>
-      <input
-        type="checkbox"
-        checked={ingredient.enabled}
-        onChange={() => toggleIngredient(recipe.id, ingredient.id)}
-      />
-
-      {" "}
-      {ingredient.name} — {ingredient.amount} {ingredient.unit} — {ingredient.shelf}
-
-      <button
-        onClick={() => removeIngredient(recipe.id, ingredient.id)}
+        <select
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
         >
-        🗑
+          <option value="stuk">stuk</option>
+          <option value="mg">mg</option>
+          <option value="g">g</option>
+          <option value="kg">kg</option>
+          <option value="ml">ml</option>
+          <option value="liter">liter</option>
+          <option value="el">el</option>
+          <option value="tl">tl</option>
+          <option value="zak">zak</option>
+          <option value="klein">klein</option>
+          <option value="groot">groot</option>
+        </select>
+
+        <select
+          value={shelf}
+          onChange={(e) => setShelf(e.target.value)}
+        >
+
+          {SHELVES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+
+        </select>
+
+        <button onClick={handleAdd}>
+          Toevoegen
         </button>
+      </div>
 
-    </li>
-  ))}
-</ul>
+      <ul className="ingredient-list">
+        {recipe.ingredients.map((ingredient) => (
+          <li key={ingredient.id} className="ingredient-list-item">
+            <input
+              type="checkbox"
+              checked={ingredient.enabled}
+              onChange={() => toggleIngredient(recipe.id, ingredient.id)}
+            />
 
-<div style={{ marginTop: 20 }}>
+            <span className="ingredient-list-text">
+              {ingredient.name} — {ingredient.amount} {ingredient.unit} — {ingredient.shelf}
+            </span>
 
-  <span>Recept aantal personen: </span>
+            <button
+              onClick={() => removeIngredient(recipe.id, ingredient.id)}
+            >
+              🗑
+            </button>
 
-    <input
-    type="number"
-    min={1}
-    value={recipe.servings ?? 1}
-    onChange={(e) =>
-      updateRecipeBaseServings(
-        recipe.id,
-        Math.max(1, Number(e.target.value))
-      )
-    }
-    style={{ width: 60, marginLeft: 10 }}
-  />
+          </li>
+        ))}
+      </ul>
 
-</div>
+      <div className="ingredient-base-servings">
+
+        <span>Recept aantal personen:</span>
+
+        <input
+          type="number"
+          min={1}
+          value={recipe.servings ?? 1}
+          onChange={(e) =>
+            updateRecipeBaseServings(
+              recipe.id,
+              Math.max(1, Number(e.target.value))
+            )
+          }
+        />
+
+      </div>
 
 <h3>Labels</h3>
 

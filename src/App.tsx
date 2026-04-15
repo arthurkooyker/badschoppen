@@ -146,6 +146,10 @@ const [sharedShoppingListMessage, setSharedShoppingListMessage] = useState("")
 const [sharedShoppingListError, setSharedShoppingListError] = useState("")
 const [isSharedShoppingListSyncing, setIsSharedShoppingListSyncing] = useState(false)
 const [isConfirmingClearAllLists, setIsConfirmingClearAllLists] = useState(false)
+const [isMobileLayout, setIsMobileLayout] = useState(() =>
+  typeof window !== "undefined" ? window.innerWidth <= 980 : false
+)
+const [isWeeklyPlannerOpen, setIsWeeklyPlannerOpen] = useState(false)
 const [leftWidth, setLeftWidth] = useState(() => {
   if (typeof window === "undefined") return 360
 
@@ -178,6 +182,21 @@ const activeSupermarket =
   resolvedActiveSupermarketIndex >= 0
     ? supermarkets[resolvedActiveSupermarketIndex]
     : null
+
+useEffect(() => {
+  if (typeof window === "undefined") return
+
+  function handleResize() {
+    setIsMobileLayout(window.innerWidth <= 980)
+  }
+
+  handleResize()
+  window.addEventListener("resize", handleResize)
+
+  return () => {
+    window.removeEventListener("resize", handleResize)
+  }
+}, [])
 
 useEffect(() => {
   const root = document.documentElement
@@ -1506,7 +1525,7 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
     {/* HEADER */}
 
-    <div className="app-header">
+    <div className={`app-header ${isMobileLayout ? "app-header-mobile" : ""}`}>
 
       <div className="mosaic-title">
 
@@ -1516,7 +1535,17 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
       </div>
 
-      <div className="weekly-planner-card">
+      {isMobileLayout && (
+        <button
+          type="button"
+          className="weekly-planner-toggle"
+          onClick={() => setIsWeeklyPlannerOpen((current) => !current)}
+        >
+          {isWeeklyPlannerOpen ? "Sluit weekoverzicht" : "Open weekoverzicht"}
+        </button>
+      )}
+
+      <div className={`weekly-planner-card ${isMobileLayout ? "weekly-planner-card-mobile" : ""} ${isMobileLayout && !isWeeklyPlannerOpen ? "weekly-planner-card-collapsed" : ""}`}>
         <div className="weekly-planner-grid">
           <div className="weekly-planner-column">
             {WEEKLY_PLANNER_DAYS.slice(0, 4).map((day) => (
@@ -1614,7 +1643,7 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
         {/* LEFT PANEL */}
 
-        <div style={{ width: leftWidth }} className="panel panel-recipes">
+        <div style={{ width: isMobileLayout ? undefined : leftWidth }} className="panel panel-recipes">
 
           <h3>Recepten</h3>
 
@@ -1703,46 +1732,61 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
         </div>
 
-        {/* RESIZE */}
+        {isMobileLayout ? (
+          selectedRecipe !== null && (
+            <div className="mobile-inline-editor">
+              <h3>{`Ingrediënten voor ${selectedRecipe.name}`}</h3>
+              <div className="panel-content">
+                <IngredientEditor
+                  recipe={selectedRecipe}
+                  allLabels={allLabels}
+                  addIngredient={addIngredient}
+                  toggleIngredient={toggleIngredient}
+                  removeIngredient={removeIngredient}
+                  addLabel={addLabel}
+                  removeLabel={removeLabel}
+                  servingsOverride={servingsOverride}
+                  updateRecipeServings={updateRecipeServings}
+                  updateRecipeBaseServings={updateRecipeBaseServings}
+                  updateRecipeNotes={updateRecipeNotes}
+                />
+              </div>
+            </div>
+          )
+        ) : (
+          <>
+            <div
+              className="resize-handle"
+              onMouseDown={(e) => {
+                startResize(e.clientX)
+              }}
+            />
 
-        <div
-          className="resize-handle"
-          onMouseDown={(e) => {
-            startResize(e.clientX)
-          }}
-        />
+            <div className="panel panel-ingredients" style={{ flex: 1 }}>
+              <h3>
+                {selectedRecipe ? `Ingrediënten voor ${selectedRecipe.name}` : "Ingrediënten"}
+              </h3>
 
-        {/* MIDDLE PANEL */}
-
-        <div className="panel panel-ingredients" style={{ flex: 1 }}>
-
-          <h3>
-            {selectedRecipe ? `Ingrediënten voor ${selectedRecipe.name}` : "Ingrediënten"}
-          </h3>
-
-          <div className="panel-content">
-
-            {selectedRecipe !== null && (
-
-            <IngredientEditor
-              recipe={selectedRecipe}
-              allLabels={allLabels}
-              addIngredient={addIngredient}
-                toggleIngredient={toggleIngredient}
-                removeIngredient={removeIngredient}
-                addLabel={addLabel}
-                removeLabel={removeLabel}
-                servingsOverride={servingsOverride}
-                updateRecipeServings={updateRecipeServings}
-                updateRecipeBaseServings={updateRecipeBaseServings}
-                updateRecipeNotes={updateRecipeNotes}
-              />
-
-            )}
-
-          </div>
-
-        </div>
+              <div className="panel-content">
+                {selectedRecipe !== null && (
+                  <IngredientEditor
+                    recipe={selectedRecipe}
+                    allLabels={allLabels}
+                    addIngredient={addIngredient}
+                    toggleIngredient={toggleIngredient}
+                    removeIngredient={removeIngredient}
+                    addLabel={addLabel}
+                    removeLabel={removeLabel}
+                    servingsOverride={servingsOverride}
+                    updateRecipeServings={updateRecipeServings}
+                    updateRecipeBaseServings={updateRecipeBaseServings}
+                    updateRecipeNotes={updateRecipeNotes}
+                  />
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
       </div>
 
@@ -1754,71 +1798,136 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
       <div className="app-grid">
 
-        <div style={{ width: leftWidth }} className="panel panel-shopping">
+        {isMobileLayout ? (
+          <>
+            <div className="panel panel-groceries" style={{ flex: 1 }}>
 
-          <h3>Geselecteerde overige boodschappen</h3>
+              <h3>Bekende overige boodschappen</h3>
 
-          <div className="panel-content">
-            <div className="overview-section">
-              <p className="muted-text">
-                Deze lijst laat zien welke overige boodschappen nu actief op je boodschappenlijst komen.
-              </p>
+              <div className="panel-content">
 
-              {selectedGroceriesByCategory.length === 0 && (
-                <p className="muted-text">Er zijn nog geen overige boodschappen geselecteerd.</p>
-              )}
+                <CustomGroceries
+                  groceries={groceries}
+                  addGrocery={addGrocery}
+                  toggleGrocery={toggleGrocery}
+                  updateGrocery={updateGrocery}
+                  removeGrocery={removeGrocery}
+                  deselectAllGroceries={deselectAllGroceries}
+                  setCategoryEnabled={setCategoryEnabled}
+                  renameCategory={renameCategory}
+                  removeCategoryItems={removeCategoryItems}
+                />
 
-              {selectedGroceriesByCategory.map(([categoryName, items]) => (
-                <details key={categoryName} className="overview-group" open>
-                  <summary className="overview-group-summary">
-                    <span>{categoryName} ({items.length})</span>
-                  </summary>
+              </div>
 
-                  <ul className="overview-list">
-                    {items.map((item) => (
-                      <li key={item.id} className="overview-list-item">
-                        <span>{item.name}</span>
-                        <span className="import-recipe-meta">
-                          {item.amount ?? 1} {item.unit ?? ""}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
             </div>
-          </div>
 
-        </div>
+            <div style={{ width: undefined }} className="panel panel-shopping">
 
-        <div
-          className="resize-handle"
-          onMouseDown={(e) => {
-            startResize(e.clientX)
-          }}
-        />
+              <h3>Geselecteerde overige boodschappen</h3>
 
-        <div className="panel panel-groceries" style={{ flex: 1 }}>
+              <div className="panel-content">
+                <div className="overview-section">
+                  <p className="muted-text">
+                    Deze lijst laat zien welke overige boodschappen nu actief op je boodschappenlijst komen.
+                  </p>
 
-          <h3>Bekende overige boodschappen</h3>
+                  {selectedGroceriesByCategory.length === 0 && (
+                    <p className="muted-text">Er zijn nog geen overige boodschappen geselecteerd.</p>
+                  )}
 
-          <div className="panel-content">
+                  {selectedGroceriesByCategory.map(([categoryName, items]) => (
+                    <details key={categoryName} className="overview-group" open={false}>
+                      <summary className="overview-group-summary">
+                        <span>{categoryName} ({items.length})</span>
+                      </summary>
 
-            <CustomGroceries
-              groceries={groceries}
-              addGrocery={addGrocery}
-              toggleGrocery={toggleGrocery}
-              updateGrocery={updateGrocery}
-              removeGrocery={removeGrocery}
-              deselectAllGroceries={deselectAllGroceries}
-              setCategoryEnabled={setCategoryEnabled}
-              renameCategory={renameCategory}
-              removeCategoryItems={removeCategoryItems}
+                      <ul className="overview-list">
+                        {items.map((item) => (
+                          <li key={item.id} className="overview-list-item">
+                            <span>{item.name}</span>
+                            <span className="import-recipe-meta">
+                              {item.amount ?? 1} {item.unit ?? ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ width: leftWidth }} className="panel panel-shopping">
+
+              <h3>Geselecteerde overige boodschappen</h3>
+
+              <div className="panel-content">
+                <div className="overview-section">
+                  <p className="muted-text">
+                    Deze lijst laat zien welke overige boodschappen nu actief op je boodschappenlijst komen.
+                  </p>
+
+                  {selectedGroceriesByCategory.length === 0 && (
+                    <p className="muted-text">Er zijn nog geen overige boodschappen geselecteerd.</p>
+                  )}
+
+                  {selectedGroceriesByCategory.map(([categoryName, items]) => (
+                    <details key={categoryName} className="overview-group" open={false}>
+                      <summary className="overview-group-summary">
+                        <span>{categoryName} ({items.length})</span>
+                      </summary>
+
+                      <ul className="overview-list">
+                        {items.map((item) => (
+                          <li key={item.id} className="overview-list-item">
+                            <span>{item.name}</span>
+                            <span className="import-recipe-meta">
+                              {item.amount ?? 1} {item.unit ?? ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            <div
+              className="resize-handle"
+              onMouseDown={(e) => {
+                startResize(e.clientX)
+              }}
             />
 
-          </div>
+            <div className="panel panel-groceries" style={{ flex: 1 }}>
 
-        </div>
+              <h3>Bekende overige boodschappen</h3>
+
+              <div className="panel-content">
+
+                <CustomGroceries
+                  groceries={groceries}
+                  addGrocery={addGrocery}
+                  toggleGrocery={toggleGrocery}
+                  updateGrocery={updateGrocery}
+                  removeGrocery={removeGrocery}
+                  deselectAllGroceries={deselectAllGroceries}
+                  setCategoryEnabled={setCategoryEnabled}
+                  renameCategory={renameCategory}
+                  removeCategoryItems={removeCategoryItems}
+                />
+
+              </div>
+
+            </div>
+          </>
+        )}
 
       </div>
 
