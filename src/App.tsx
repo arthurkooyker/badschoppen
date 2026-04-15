@@ -2342,8 +2342,30 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
         onApplyImport={applyImportedRecipes}
         onApplyGroceries={applyGroceriesToData}
         syncStatus={syncStatus}
-        onRecipePreviewPullSuccess={() => updateSyncStatus({ recipesLastPulledAt: getTimestamp() })}
-        onGroceryPreviewPullSuccess={() => updateSyncStatus({ groceriesLastPulledAt: getTimestamp() })}
+        onRecipePreviewPullSuccess={(householdId) => {
+          setData((currentData) => ({
+            ...currentData,
+            syncSettings: {
+              ...currentData.syncSettings,
+              recipeSource: currentData.syncSettings?.recipeSource ?? "local",
+              grocerySource: currentData.syncSettings?.grocerySource ?? "local",
+              recipeHouseholdId: householdId
+            }
+          }))
+          updateSyncStatus({ recipesLastPulledAt: getTimestamp() })
+        }}
+        onGroceryPreviewPullSuccess={(householdId) => {
+          setData((currentData) => ({
+            ...currentData,
+            syncSettings: {
+              ...currentData.syncSettings,
+              recipeSource: currentData.syncSettings?.recipeSource ?? "local",
+              grocerySource: currentData.syncSettings?.grocerySource ?? "local",
+              groceryHouseholdId: householdId
+            }
+          }))
+          updateSyncStatus({ groceriesLastPulledAt: getTimestamp() })
+        }}
       />
 
     )}

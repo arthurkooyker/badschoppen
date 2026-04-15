@@ -40,8 +40,8 @@ type Props = {
   onApplyImport: (recipes: Recipe[]) => void
   onApplyGroceries: (groceries: Grocery[]) => void
   syncStatus: SyncStatus
-  onRecipePreviewPullSuccess: () => void
-  onGroceryPreviewPullSuccess: () => void
+  onRecipePreviewPullSuccess: (householdId: string) => void
+  onGroceryPreviewPullSuccess: (householdId: string) => void
 }
 
 function ImportExportPanel({
@@ -376,7 +376,7 @@ function ImportExportPanel({
   async function refreshRecipeComparisonPreview(householdId: string) {
     const exportFile = await fetchRecipesFromHousehold(householdId)
 
-    onRecipePreviewPullSuccess()
+    onRecipePreviewPullSuccess(householdId)
     setImportPreview(exportFile)
     setImportFileName("Supabase huishouden")
     setConflictResolutions({})
@@ -392,7 +392,7 @@ function ImportExportPanel({
   async function refreshGroceryComparisonPreview(householdId: string) {
     const items = await fetchGroceriesFromHousehold(householdId)
 
-    onGroceryPreviewPullSuccess()
+    onGroceryPreviewPullSuccess(householdId)
     setSupabaseGroceryPreview(items)
     setSupabaseGroceryChoices({})
     setSyncMessage(`${items.length} overige boodschappen uit Supabase geladen voor vergelijking.`)
