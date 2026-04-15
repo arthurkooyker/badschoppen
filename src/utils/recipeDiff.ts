@@ -5,8 +5,7 @@ function normalizeIngredientForComparison(ingredient: Ingredient) {
     name: ingredient.name.trim(),
     amount: ingredient.amount,
     unit: ingredient.unit,
-    shelf: ingredient.shelf,
-    enabled: ingredient.enabled === false ? false : true
+    shelf: ingredient.shelf
   }
 }
 
@@ -14,8 +13,8 @@ function sortIngredientsForComparison(ingredients: Ingredient[]) {
   return ingredients
     .map(normalizeIngredientForComparison)
     .sort((a, b) =>
-      `${a.name}|${a.unit}|${a.shelf}|${a.amount}|${a.enabled}`.localeCompare(
-        `${b.name}|${b.unit}|${b.shelf}|${b.amount}|${b.enabled}`
+      `${a.name}|${a.unit}|${a.shelf}|${a.amount}`.localeCompare(
+        `${b.name}|${b.unit}|${b.shelf}|${b.amount}`
       )
     )
 }

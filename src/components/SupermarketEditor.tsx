@@ -1,9 +1,12 @@
+import { useState } from "react"
+
 type Props = {
   route: string[]
   updateRoute: (route: string[]) => void
 }
 
 function SupermarketEditor({ route, updateRoute }: Props) {
+  const [draggedShelf, setDraggedShelf] = useState<string | null>(null)
 
   function moveShelf(index: number, direction: number) {
 
@@ -20,6 +23,17 @@ function SupermarketEditor({ route, updateRoute }: Props) {
     updateRoute(updated)
   }
 
+  function moveShelfToIndex(shelf: string, targetIndex: number) {
+    const currentIndex = route.indexOf(shelf)
+
+    if (currentIndex < 0 || currentIndex === targetIndex) return
+
+    const updated = [...route]
+    updated.splice(currentIndex, 1)
+    updated.splice(targetIndex, 0, shelf)
+    updateRoute(updated)
+  }
+
   return (
 
     <div style={{ marginTop: 16 }}>
@@ -28,8 +42,22 @@ function SupermarketEditor({ route, updateRoute }: Props) {
 
         {route.map((shelf, index) => (
 
-          <li key={shelf} className="route-row">
+          <li
+            key={shelf}
+            className={`route-row ${draggedShelf === shelf ? "route-row-dragging" : ""}`}
+            draggable
+            onDragStart={() => setDraggedShelf(shelf)}
+            onDragEnd={() => setDraggedShelf(null)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (draggedShelf) {
+                moveShelfToIndex(draggedShelf, index)
+              }
+              setDraggedShelf(null)
+            }}
+          >
             <div className="route-controls">
+              <span className="route-drag-handle" aria-hidden="true">⋮⋮</span>
               <button
                 type="button"
                 className="route-arrow"

@@ -35,6 +35,8 @@ function IngredientEditor({
   const [unit, setUnit] = useState("stuk")
   const [shelf, setShelf] = useState("overig")
   const [newLabel, setNewLabel] = useState("")
+  const [shoppingServingsInput, setShoppingServingsInput] = useState(() => String(servingsOverride[recipe.id] ?? recipe.servings))
+  const [baseServingsInput, setBaseServingsInput] = useState(() => String(recipe.servings ?? 1))
 
   function parseAmount(value: string) {
     return Number(value.replace(",", "."))
@@ -67,6 +69,46 @@ function IngredientEditor({
     setNewLabel("")
 }
 
+  function commitShoppingServings(value: string) {
+    const trimmed = value.trim()
+
+    if (trimmed === "") {
+      setShoppingServingsInput("")
+      return
+    }
+
+    const parsed = Number(trimmed)
+
+    if (Number.isFinite(parsed) && parsed >= 1) {
+      const normalized = String(Math.max(1, parsed))
+      setShoppingServingsInput(normalized)
+      updateRecipeServings(recipe.id, Math.max(1, parsed))
+      return
+    }
+
+    setShoppingServingsInput(String(servingsOverride[recipe.id] ?? recipe.servings))
+  }
+
+  function commitBaseServings(value: string) {
+    const trimmed = value.trim()
+
+    if (trimmed === "") {
+      setBaseServingsInput("")
+      return
+    }
+
+    const parsed = Number(trimmed)
+
+    if (Number.isFinite(parsed) && parsed >= 1) {
+      const normalized = String(Math.max(1, parsed))
+      setBaseServingsInput(normalized)
+      updateRecipeBaseServings(recipe.id, Math.max(1, parsed))
+      return
+    }
+
+    setBaseServingsInput(String(recipe.servings ?? 1))
+  }
+
   return (
     <div className="ingredient-editor">
       
@@ -74,15 +116,11 @@ function IngredientEditor({
 
       <div className="ingredient-servings-row">
         <input
-          type="number"
-          min={1}
-          value={servingsOverride[recipe.id] ?? recipe.servings}
-          onChange={(e) =>
-            updateRecipeServings(
-              recipe.id,
-              Math.max(1, Number(e.target.value))
-            )
-          }
+          type="text"
+          inputMode="numeric"
+          value={shoppingServingsInput}
+          onChange={(e) => setShoppingServingsInput(e.target.value)}
+          onBlur={(e) => commitShoppingServings(e.target.value)}
         />
 
         <span>personen</span>
@@ -169,9 +207,11 @@ function IngredientEditor({
             </span>
 
             <button
+              type="button"
+              className="ingredient-remove-button"
               onClick={() => removeIngredient(recipe.id, ingredient.id)}
             >
-              🗑
+              verwijder
             </button>
 
           </li>
@@ -183,15 +223,11 @@ function IngredientEditor({
         <span>Recept aantal personen:</span>
 
         <input
-          type="number"
-          min={1}
-          value={recipe.servings ?? 1}
-          onChange={(e) =>
-            updateRecipeBaseServings(
-              recipe.id,
-              Math.max(1, Number(e.target.value))
-            )
-          }
+          type="text"
+          inputMode="numeric"
+          value={baseServingsInput}
+          onChange={(e) => setBaseServingsInput(e.target.value)}
+          onBlur={(e) => commitBaseServings(e.target.value)}
         />
 
       </div>

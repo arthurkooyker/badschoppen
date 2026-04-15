@@ -28,7 +28,7 @@ function CustomGroceries({
      }: Props) {
 
   const [name, setName] = useState("")
-  const [amount, setAmount] = useState(1)
+  const [amount, setAmount] = useState("1")
   const [unit, setUnit] = useState("stuk")
   const [shelf, setShelf] = useState("overig")
   const [category, setCategory] = useState("")
@@ -88,7 +88,7 @@ function CustomGroceries({
 
     addGrocery({
       name,
-      amount,
+      amount: amount.trim() === "" ? 1 : Number(amount),
       unit,
       shelf,
       enabled: true,
@@ -96,7 +96,7 @@ function CustomGroceries({
     })
 
     setName("")
-    setAmount(1)
+    setAmount("1")
     setCategory("")
     nameInputRef.current?.focus()
   }
@@ -130,9 +130,10 @@ function CustomGroceries({
         />
 
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
+          onChange={(e) => setAmount(e.target.value)}
           className="grocery-add-amount"
         />
 
@@ -217,45 +218,48 @@ function CustomGroceries({
         )}
 
         {sortedGroupEntries.map(([groupName, items]) => (
-          <details key={groupName} className="grocery-group" open>
+          <details key={groupName} className="grocery-group">
             <summary className="grocery-group-summary">
               <span>{groupName}</span>
               <span className="grocery-group-count">{items.length}</span>
             </summary>
 
             <div className="grocery-group-actions">
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoryEnabled(
-                    groupName === "Zonder categorie" ? undefined : groupName,
-                    true
-                  )
-                }
-              >
-                alles aan
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoryEnabled(
-                    groupName === "Zonder categorie" ? undefined : groupName,
-                    false
-                  )
-                }
-              >
-                alles uit
-              </button>
-
-              {groupName !== "Zonder categorie" && (
-                <button type="button" onClick={() => startRenameGroup(groupName)}>
-                  hernoem
+              <div className="grocery-group-actions-main">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCategoryEnabled(
+                      groupName === "Zonder categorie" ? undefined : groupName,
+                      true
+                    )
+                  }
+                >
+                  alles aan
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCategoryEnabled(
+                      groupName === "Zonder categorie" ? undefined : groupName,
+                      false
+                    )
+                  }
+                >
+                  alles uit
+                </button>
+
+                {groupName !== "Zonder categorie" && (
+                  <button type="button" onClick={() => startRenameGroup(groupName)}>
+                    hernoem
+                  </button>
+                )}
+              </div>
 
               <button
                 type="button"
+                className="grocery-group-delete"
                 onClick={() =>
                   removeCategoryItems(
                     groupName === "Zonder categorie" ? undefined : groupName
@@ -293,72 +297,79 @@ function CustomGroceries({
             <ul className="grocery-group-list">
               {items.map(({ g, i }) => (
                 <li key={`${groupName}-${i}`} className="grocery-row">
-                  <input
-                    type="checkbox"
-                    checked={g.enabled !== false}
-                    onChange={() => toggleGrocery(i)}
-                  />
+                  <div className="grocery-row-main">
+                    <input
+                      type="checkbox"
+                      checked={g.enabled !== false}
+                      onChange={() => toggleGrocery(i)}
+                    />
 
-                  <input
-                    value={g.name}
-                    onChange={(e) =>
-                      updateGrocery(i, { ...g, name: e.target.value })
-                    }
-                  />
+                    <input
+                      value={g.name}
+                      onChange={(e) =>
+                        updateGrocery(i, { ...g, name: e.target.value })
+                      }
+                    />
 
-                  <input
-                    type="number"
-                    value={g.amount || ""}
-                    onChange={(e) =>
-                      updateGrocery(i, { ...g, amount: Number(e.target.value) })
-                    }
-                    style={{ width: 80 }}
-                  />
+                    <button className="grocery-row-delete" onClick={() => removeGrocery(i)}>🗑</button>
+                  </div>
 
-                  <select
-                    value={g.unit || ""}
-                    onChange={(e) =>
-                      updateGrocery(i, { ...g, unit: e.target.value })
-                    }
-                  >
-                    <option value="">-</option>
-                    <option value="g">g</option>
-                    <option value="kg">kg</option>
-              <option value="ml">ml</option>
-              <option value="l">l</option>
-              <option value="el">el</option>
-              <option value="tl">tl</option>
-              <option value="stuk">stuk</option>
-            </select>
+                  <div className="grocery-row-secondary">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={g.amount ?? ""}
+                      onChange={(e) =>
+                        updateGrocery(i, {
+                          ...g,
+                          amount: e.target.value.trim() === "" ? undefined : Number(e.target.value)
+                        })
+                      }
+                    />
 
-                  <select
-                    value={g.shelf || ""}
-                    onChange={(e) =>
-                      updateGrocery(i, { ...g, shelf: e.target.value })
-                    }
-                  >
-                    <option value="">-</option>
+                    <select
+                      value={g.unit || ""}
+                      onChange={(e) =>
+                        updateGrocery(i, { ...g, unit: e.target.value })
+                      }
+                    >
+                      <option value="">-</option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">l</option>
+                      <option value="el">el</option>
+                      <option value="tl">tl</option>
+                      <option value="stuk">stuk</option>
+                    </select>
 
-                    {SHELVES.map((shelf) => (
-                      <option key={shelf} value={shelf}>
-                        {shelf}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      value={g.shelf || ""}
+                      onChange={(e) =>
+                        updateGrocery(i, { ...g, shelf: e.target.value })
+                      }
+                    >
+                      <option value="">-</option>
 
-                  <input
-                    value={g.category || ""}
-                    onChange={(e) =>
-                      updateGrocery(i, {
-                        ...g,
-                        category: e.target.value.trim() || undefined
-                      })
-                    }
-                    placeholder="Categorie"
-                    list="grocery-categories"
-                  />
+                      {SHELVES.map((shelf) => (
+                        <option key={shelf} value={shelf}>
+                          {shelf}
+                        </option>
+                      ))}
+                    </select>
 
-                  <button onClick={() => removeGrocery(i)}>🗑</button>
+                    <input
+                      value={g.category || ""}
+                      onChange={(e) =>
+                        updateGrocery(i, {
+                          ...g,
+                          category: e.target.value.trim() || undefined
+                        })
+                      }
+                      placeholder="Categorie"
+                      list="grocery-categories"
+                    />
+                  </div>
                 </li>
               ))}
             </ul>

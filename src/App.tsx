@@ -592,7 +592,8 @@ function deselectAllGroceries() {
 
   }
 
-  function updateRecipeServings(id: string, servings: number) {
+function updateRecipeServings(id: string, servings: number) {
+  if (!Number.isFinite(servings) || servings < 1) return
 
   setData({
     ...data,
@@ -1067,26 +1068,6 @@ function removeIngredient(recipeId: string, ingredientId: string) {
 function selectRecipeAndEnableIngredients(id: string) {
 
   setSelectedRecipeId(id)
-
-  const updatedRecipes = data.recipes.map((r) => {
-
-    if (r.id !== id) return r
-
-    return {
-      ...r,
-      ingredients: r.ingredients.map(ing => ({
-        ...ing,
-        enabled: true
-      }))
-    }
-
-  })
-
-  setData({
-    ...data,
-    recipes: updatedRecipes
-  })
-
 }
 
 function updateGrocery(index: number, updatedItem: Grocery) {
@@ -1643,7 +1624,10 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
         {/* LEFT PANEL */}
 
-        <div style={{ width: isMobileLayout ? undefined : leftWidth }} className="panel panel-recipes">
+        <div
+          style={{ width: isMobileLayout ? undefined : leftWidth }}
+          className={`panel panel-recipes ${isMobileLayout ? "mobile-tall-panel" : ""}`}
+        >
 
           <h3>Recepten</h3>
 
@@ -1738,6 +1722,7 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
               <h3>{`Ingrediënten voor ${selectedRecipe.name}`}</h3>
               <div className="panel-content">
                 <IngredientEditor
+                  key={selectedRecipe.id}
                   recipe={selectedRecipe}
                   allLabels={allLabels}
                   addIngredient={addIngredient}
@@ -1770,6 +1755,7 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
               <div className="panel-content">
                 {selectedRecipe !== null && (
                   <IngredientEditor
+                    key={selectedRecipe.id}
                     recipe={selectedRecipe}
                     allLabels={allLabels}
                     addIngredient={addIngredient}
@@ -2338,7 +2324,10 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
 
     {/* LEFT: SUPERMARKETS LIST */}
 
-    <div style={{ width: leftWidth }} className="panel panel-recipes">
+    <div
+      style={{ width: isMobileLayout ? undefined : leftWidth }}
+      className={`panel panel-recipes ${isMobileLayout ? "mobile-tall-panel" : ""}`}
+    >
 
       <h3>Supermarkten</h3>
 

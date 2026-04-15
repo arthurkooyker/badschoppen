@@ -840,7 +840,7 @@ function ImportExportPanel({
 
   return (
     <div className="app-grid">
-      <div className="panel panel-recipes" style={{ width: 420 }}>
+      <div className="panel panel-recipes import-export-primary-panel" style={{ width: 420 }}>
         <h3>Import / export</h3>
 
         <div className="panel-content">

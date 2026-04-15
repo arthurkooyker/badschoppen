@@ -82,9 +82,9 @@ function RecipeList({
 
           ) : (
 
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div className="recipe-row">
 
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="recipe-row-main">
 
                 <input
                   type="checkbox"
@@ -98,17 +98,19 @@ function RecipeList({
 
               </div>
 
-              <button
-                onClick={() => startEditing(index, recipe.name)}
-              >
-                ✏️
-              </button>
+              <div className="recipe-row-actions">
+                <button
+                  onClick={() => startEditing(index, recipe.name)}
+                >
+                  ✏️
+                </button>
 
-              <button
-                onClick={() => deleteRecipe(recipe.id)}
-              >
-                🗑
-              </button>
+                <button
+                  onClick={() => deleteRecipe(recipe.id)}
+                >
+                  🗑
+                </button>
+              </div>
 
             </div>
 

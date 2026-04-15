@@ -1248,6 +1248,16 @@ li {
   flex: 1 1 220px;
 }
 
+.grocery-group-actions-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.grocery-group-delete {
+  align-self: flex-start;
+}
+
 .supermarket-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto auto;
@@ -1300,11 +1310,41 @@ li {
 }
 
 .grocery-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(31, 108, 116, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.grocery-row-main {
   display: grid;
-  grid-template-columns: 26px minmax(160px, 1.4fr) 84px 96px 150px minmax(130px, 1fr) 48px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  margin-bottom: 10px;
+}
+
+.grocery-row-main input[type="text"] {
+  width: 100%;
+}
+
+.grocery-row-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.grocery-row-secondary > * {
+  width: 100%;
+}
+
+.grocery-row-delete {
+  min-width: 36px;
+  padding: 4px 8px;
 }
 
 .ingredient-label-add {
@@ -1372,6 +1412,24 @@ li {
   min-width: 0;
 }
 
+.ingredient-remove-button {
+  min-height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-strong);
+  font-style: italic;
+  font-weight: 500;
+}
+
+.ingredient-remove-button:hover {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-warm);
+  transform: none;
+}
+
 .ingredient-label-add input {
   flex: 1;
 }
@@ -1406,6 +1464,30 @@ li {
   width: 100%;
 }
 
+.recipe-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.recipe-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.recipe-row-main button {
+  text-align: left;
+}
+
+.recipe-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
 .route-list {
   display: flex;
   flex-direction: column;
@@ -1423,10 +1505,25 @@ li {
   background: rgba(255, 255, 255, 0.4);
 }
 
+.route-row-dragging {
+  opacity: 0.6;
+}
+
 .route-controls {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.route-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: grab;
+  user-select: none;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .route-arrow {
@@ -1560,7 +1657,7 @@ li {
   }
 
   .grocery-row {
-    grid-template-columns: 26px 1fr;
+    padding: 8px 10px;
   }
 
   .supermarket-item {
@@ -1572,9 +1669,19 @@ li {
     flex-direction: column;
   }
 
+  .grocery-group-actions-main {
+    width: 100%;
+  }
+
   .grocery-filter,
   .grocery-search {
     width: 100%;
+  }
+
+  .grocery-search {
+    min-height: 34px;
+    padding-top: 6px;
+    padding-bottom: 6px;
   }
 
   .grocery-toolbar {
@@ -1592,13 +1699,30 @@ li {
     align-items: flex-start;
   }
 
-  .ingredient-list-item {
-    grid-template-columns: 24px minmax(0, 1fr);
+  .recipe-row {
+    align-items: stretch;
   }
 
-  .ingredient-list-item button {
-    grid-column: 2;
-    justify-self: start;
+  .recipe-row-actions {
+    flex-direction: column;
+    flex: 0 0 auto;
+  }
+
+  .recipe-row-actions button {
+    width: 100%;
+  }
+
+  .mobile-tall-panel,
+  .import-export-primary-panel {
+    max-height: 68vh;
+  }
+
+  .grocery-row-delete {
+    justify-self: end;
+  }
+
+  .route-controls {
+    gap: 4px;
   }
 
   .import-export-actions {
@@ -1660,5 +1784,13 @@ li {
   .weekly-planner-clear {
     min-height: 34px;
     height: 34px;
+  }
+
+  .grocery-row-main {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+
+  .grocery-row-secondary {
+    grid-template-columns: 1fr 1fr;
   }
 }
