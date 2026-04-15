@@ -1,0 +1,3 @@
+- Build datum: 12-4-2026
+- Voor welke architectuur: Intel
+- Getest op welke Mac: Floor
