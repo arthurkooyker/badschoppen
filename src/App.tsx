@@ -15,7 +15,7 @@ import { usePersistentState } from "./hooks/usePersistentState"
 import { createInitialAppData, normalizeAppData } from "./utils/appData"
 import { normalizeComparisonText } from "./utils/textNormalization"
 import { normalizeUnit } from "./utils/unitConversion"
-import { fetchGroceriesFromHousehold } from "./utils/supabaseGroceries"
+import { fetchGroceriesFromHousehold, uploadGroceriesToHousehold } from "./utils/supabaseGroceries"
 import { fetchRecipesFromHousehold, updateRecipeInHousehold } from "./utils/supabaseRecipes"
 import {
   clearShoppingList,
@@ -754,15 +754,8 @@ const selectedGroceriesByCategory = Object.entries(
   [...items].sort((a, b) => a.name.localeCompare(b.name, "nl-NL"))
 ] as const)
 
-function areGroceriesEquivalentForShoppingList(localGrocery: Grocery, sharedGrocery: Grocery) {
-  return (
-    normalizeComparisonText(localGrocery.name) === normalizeComparisonText(sharedGrocery.name) &&
-    (localGrocery.amount ?? 1) === (sharedGrocery.amount ?? 1) &&
-    (localGrocery.unit ?? "") === (sharedGrocery.unit ?? "") &&
-    (localGrocery.shelf ?? "overig") === (sharedGrocery.shelf ?? "overig") &&
-    (localGrocery.category?.trim() ?? "") === (sharedGrocery.category?.trim() ?? "") &&
-    (localGrocery.enabled !== false) === (sharedGrocery.enabled !== false)
-  )
+function getIngredientOverviewKey(ingredient: Ingredient) {
+  return `${normalizeComparisonText(ingredient.name)}|${ingredient.shelf ?? "overig"}`
 }
 
 function getScaledIngredientAmount(
@@ -831,31 +824,6 @@ const shoppingOverviewRecipes = Array.from(
   const localServings = localRecipe ? servingsOverride[recipeId] ?? localRecipe.servings : null
   const sharedServings = sharedRecipe ? sharedShoppingListData?.servingsOverride[recipeId] ?? sharedRecipe.servings : null
 
-  const localIngredientKeys = new Set(
-    (localRecipe?.ingredients ?? [])
-      .filter((ingredient) => ingredient.enabled !== false)
-      .map((ingredient) => ingredient.id)
-  )
-
-  const sharedIngredientKeys = new Set(
-    (sharedRecipe?.ingredients ?? [])
-      .filter((ingredient) => ingredient.enabled !== false)
-      .map((ingredient) => ingredient.id)
-  )
-
-  const sameIngredients =
-    localIngredientKeys.size === sharedIngredientKeys.size &&
-    [...localIngredientKeys].every((key) => sharedIngredientKeys.has(key))
-
-  const status =
-    localRecipe && sharedRecipe
-      ? localServings === sharedServings && sameIngredients
-        ? "gedeeld"
-        : "lokaal anders dan gedeeld"
-      : localRecipe
-        ? "alleen lokaal"
-        : "alleen gedeeld"
-
   const ingredientMap = new Map<string, {
     ingredient: Ingredient
     localIngredient?: Ingredient
@@ -863,51 +831,101 @@ const shoppingOverviewRecipes = Array.from(
   }>()
 
   for (const ingredient of localRecipe?.ingredients.filter((item) => item.enabled !== false) ?? []) {
-    ingredientMap.set(ingredient.id, {
+    const key = getIngredientOverviewKey(ingredient)
+    ingredientMap.set(key, {
       ingredient,
       localIngredient: ingredient,
-      sharedIngredient: ingredientMap.get(ingredient.id)?.sharedIngredient
+      sharedIngredient: ingredientMap.get(key)?.sharedIngredient
     })
   }
 
   for (const ingredient of sharedRecipe?.ingredients.filter((item) => item.enabled !== false) ?? []) {
-    const current = ingredientMap.get(ingredient.id)
-    ingredientMap.set(ingredient.id, {
+    const key = getIngredientOverviewKey(ingredient)
+    const current = ingredientMap.get(key)
+    ingredientMap.set(key, {
       ingredient: current?.ingredient ?? ingredient,
       localIngredient: current?.localIngredient,
       sharedIngredient: ingredient
     })
   }
 
-  const ingredients = Array.from(ingredientMap.values()).map((entry) => ({
-    ingredient: entry.ingredient,
-    status:
-      entry.localIngredient && entry.sharedIngredient
-        ? "gedeeld"
-        : entry.localIngredient
-          ? "alleen lokaal"
-          : "alleen gedeeld",
-    localScaled:
-      entry.localIngredient && localRecipe
-        ? getScaledIngredientAmount(
-            entry.localIngredient,
-            localRecipe.servings,
-            localServings ?? localRecipe.servings
-          )
-        : null,
-    sharedScaled:
-      entry.sharedIngredient && sharedRecipe
-        ? getScaledIngredientAmount(
-            entry.sharedIngredient,
-            sharedRecipe.servings,
-            sharedServings ?? sharedRecipe.servings
-          )
-        : null
-  }))
+  const ingredients = Array.from(ingredientMap.values())
+    .map((entry) => {
+      const localScaled =
+        entry.localIngredient && localRecipe
+          ? getScaledIngredientAmount(
+              entry.localIngredient,
+              localRecipe.servings,
+              localServings ?? localRecipe.servings
+            )
+          : null
+
+      const sharedScaled =
+        entry.sharedIngredient && sharedRecipe
+          ? getScaledIngredientAmount(
+              entry.sharedIngredient,
+              sharedRecipe.servings,
+              sharedServings ?? sharedRecipe.servings
+            )
+          : null
+
+      const localOnly = Boolean(entry.localIngredient && !entry.sharedIngredient)
+      const sharedOnly = Boolean(entry.sharedIngredient && !entry.localIngredient)
+      const directQuantityChanged = Boolean(
+        entry.localIngredient &&
+        entry.sharedIngredient &&
+        (
+          entry.localIngredient.amount !== entry.sharedIngredient.amount ||
+          entry.localIngredient.unit !== entry.sharedIngredient.unit
+        )
+      )
+      const effectiveQuantityChanged = Boolean(
+        localScaled &&
+        sharedScaled &&
+        (localScaled.amount !== sharedScaled.amount || localScaled.unit !== sharedScaled.unit)
+      )
+
+      return {
+        ingredient: entry.ingredient,
+        localIngredient: entry.localIngredient,
+        sharedIngredient: entry.sharedIngredient,
+        localScaled,
+        sharedScaled,
+        localOnly,
+        sharedOnly,
+        directQuantityChanged,
+        effectiveQuantityChanged
+      }
+    })
+    .sort((a, b) => a.ingredient.name.localeCompare(b.ingredient.name, "nl-NL"))
+
+  const hasLocalOnlyIngredients = ingredients.some((ingredient) => ingredient.localOnly)
+  const hasSharedOnlyIngredients = ingredients.some((ingredient) => ingredient.sharedOnly)
+  const hasIngredientQuantityChanges = ingredients.some((ingredient) => ingredient.effectiveQuantityChanged)
+  const hasServingsDifference =
+    localRecipe !== undefined &&
+    sharedRecipe !== undefined &&
+    localServings !== sharedServings
+
+  const symbolKind =
+    localRecipe && !sharedRecipe
+      ? "local"
+      : !localRecipe && sharedRecipe
+        ? "shared"
+        : hasLocalOnlyIngredients && hasSharedOnlyIngredients
+          ? "mixed"
+          : hasLocalOnlyIngredients
+            ? "local"
+            : hasSharedOnlyIngredients
+              ? "shared"
+              : null
+
+  const hasStar = hasServingsDifference || hasIngredientQuantityChanges
 
   return {
     recipe,
-    status,
+    symbolKind,
+    hasStar,
     localRecipe,
     sharedRecipe,
     localServings,
@@ -915,6 +933,7 @@ const shoppingOverviewRecipes = Array.from(
     ingredients
   }
 }).filter((item): item is NonNullable<typeof item> => item !== null)
+  .sort((a, b) => a.recipe.name.localeCompare(b.recipe.name, "nl-NL"))
 
 const localSelectedGroceriesById = new Map(selectedGroceries.map((grocery) => [grocery.id, grocery]))
 const sharedSelectedGroceriesById = new Map((sharedShoppingListData?.groceries ?? []).map((grocery) => [grocery.id, grocery]))
@@ -923,7 +942,7 @@ const shoppingOverviewGroceriesByCategory = Object.entries(
     new Set([
       ...selectedGroceries.map((grocery) => grocery.id),
       ...(sharedShoppingListData?.groceries ?? []).map((grocery) => grocery.id)
-    ])
+  ])
   ).map((groceryId) => {
     const localGrocery = localSelectedGroceriesById.get(groceryId)
     const sharedGrocery = sharedSelectedGroceriesById.get(groceryId)
@@ -938,14 +957,16 @@ const shoppingOverviewGroceriesByCategory = Object.entries(
       grocery,
       localGrocery,
       sharedGrocery,
-      status:
-        localGrocery && sharedGrocery
-          ? areGroceriesEquivalentForShoppingList(localGrocery, sharedGrocery)
-            ? "gedeeld"
-            : "lokaal anders dan gedeeld"
-          : localGrocery
-            ? "alleen lokaal"
-            : "alleen gedeeld"
+      localOnly: Boolean(localGrocery && !sharedGrocery),
+      sharedOnly: Boolean(sharedGrocery && !localGrocery),
+      quantityChanged: Boolean(
+        localGrocery &&
+        sharedGrocery &&
+        (
+          (localGrocery.amount ?? 1) !== (sharedGrocery.amount ?? 1) ||
+          (localGrocery.unit ?? "") !== (sharedGrocery.unit ?? "")
+        )
+      )
     }
   }).filter((item): item is NonNullable<typeof item> => item !== null)
     .reduce<Record<string, Array<{
@@ -953,7 +974,9 @@ const shoppingOverviewGroceriesByCategory = Object.entries(
       grocery: Grocery
       localGrocery?: Grocery
       sharedGrocery?: Grocery
-      status: string
+      localOnly: boolean
+      sharedOnly: boolean
+      quantityChanged: boolean
     }>>>((groups, item) => {
       if (!groups[item.category]) {
         groups[item.category] = []
@@ -966,16 +989,60 @@ const shoppingOverviewGroceriesByCategory = Object.entries(
   if (a === "Zonder categorie") return 1
   if (b === "Zonder categorie") return -1
   return a.localeCompare(b)
-})
+}).map(([category, items]) => [
+  category,
+  [...items].sort((a, b) => a.grocery.name.localeCompare(b.grocery.name, "nl-NL"))
+] as const)
 
-const pendingRecipeChanges = shoppingOverviewRecipes.filter(
-  ({ status }) => status === "alleen lokaal" || status === "lokaal anders dan gedeeld"
-)
-const pendingGroceryChanges = shoppingOverviewGroceriesByCategory.flatMap(([, items]) =>
-  items.filter(
-    (item) => item.status === "alleen lokaal" || item.status === "lokaal anders dan gedeeld"
+function renderOverviewSymbols(symbolKind: "local" | "shared" | "mixed" | null, hasStar: boolean) {
+  return (
+    <>
+      {symbolKind === "local" && <span className="overview-dot overview-dot-local" />}
+      {symbolKind === "shared" && <span className="overview-dot overview-dot-shared" />}
+      {symbolKind === "mixed" && <span className="overview-dot overview-dot-mixed" />}
+      {hasStar && <span className="overview-star" aria-label="afwijkende hoeveelheid">*</span>}
+    </>
   )
-)
+}
+
+function mergeRecipeForSharedSync(localRecipe: Recipe, sharedRecipe?: Recipe): Recipe {
+  if (!sharedRecipe) {
+    return localRecipe
+  }
+
+  const mergedIngredients = new Map(
+    sharedRecipe.ingredients.map((ingredient) => [getIngredientOverviewKey(ingredient), ingredient])
+  )
+
+  for (const ingredient of localRecipe.ingredients) {
+    const key = getIngredientOverviewKey(ingredient)
+
+    if (ingredient.enabled === false && mergedIngredients.has(key)) {
+      continue
+    }
+
+    mergedIngredients.set(key, ingredient)
+  }
+
+  return {
+    ...localRecipe,
+    ingredients: Array.from(mergedIngredients.values())
+  }
+}
+
+function getSharedShoppingSyncErrorMessage(error: unknown) {
+  const message = getSupabaseErrorMessage(error)
+
+  if (message.includes("shopping_list_recipes_recipe_id_fkey")) {
+    return "A.u.b. eerst recepten met Supabase synchroniseren."
+  }
+
+  if (message.includes("shopping_list_groceries_grocery_id_fkey")) {
+    return "A.u.b. eerst overige boodschappen met Supabase synchroniseren."
+  }
+
+  return message
+}
 
 function updateRecipeNotes(recipeId: string, notes: string) {
 
@@ -1250,13 +1317,98 @@ async function syncSharedShoppingListFromApp() {
       throw new Error("Log eerst in bij Supabase om de gedeelde boodschappenlijst bij te werken.")
     }
 
+    const mergedRecipesMap = new Map(
+      (sharedShoppingListData?.recipes ?? []).map((recipe) => [recipe.id, recipe])
+    )
+
+    for (const recipe of selectedRecipeObjects) {
+      mergedRecipesMap.set(recipe.id, recipe)
+    }
+
+    const mergedSelectedRecipeIds = Array.from(
+      new Set([
+        ...(sharedShoppingListData?.selectedRecipeIds ?? []),
+        ...selectedRecipes
+      ])
+    )
+
+    const mergedServingsOverride = {
+      ...(sharedShoppingListData?.servingsOverride ?? {})
+    }
+
+    for (const [recipeId, value] of Object.entries(servingsOverride)) {
+      mergedServingsOverride[recipeId] = value
+    }
+
+    const mergedGroceriesMap = new Map(
+      (sharedShoppingListData?.groceries ?? []).map((grocery) => [grocery.id, { ...grocery, enabled: true }])
+    )
+
+    for (const grocery of selectedGroceries) {
+      mergedGroceriesMap.set(grocery.id, { ...grocery, enabled: true })
+    }
+
+    const localSelectedRecipeIds = selectedRecipeObjects.map((recipe) => recipe.id)
+    const localSelectedGroceryIds = selectedGroceries.map((grocery) => grocery.id)
+
+    if (localSelectedRecipeIds.length > 0) {
+      const { data: existingRecipes, error: recipeCheckError } = await supabase
+        .from("recipes")
+        .select("id")
+        .eq("household_id", householdId)
+        .is("deleted_at", null)
+        .in("id", localSelectedRecipeIds)
+
+      if (recipeCheckError) throw recipeCheckError
+
+      const knownRecipeIds = new Set((existingRecipes ?? []).map((recipe) => recipe.id))
+
+      if (localSelectedRecipeIds.some((recipeId) => !knownRecipeIds.has(recipeId))) {
+        throw new Error("A.u.b. eerst recepten met Supabase synchroniseren.")
+      }
+    }
+
+    if (localSelectedGroceryIds.length > 0) {
+      const { data: existingGroceries, error: groceryCheckError } = await supabase
+        .from("groceries")
+        .select("id")
+        .eq("household_id", householdId)
+        .is("deleted_at", null)
+        .in("id", localSelectedGroceryIds)
+
+      if (groceryCheckError) throw groceryCheckError
+
+      const knownGroceryIds = new Set((existingGroceries ?? []).map((grocery) => grocery.id))
+
+      if (localSelectedGroceryIds.some((groceryId) => !knownGroceryIds.has(groceryId))) {
+        throw new Error("A.u.b. eerst overige boodschappen met Supabase synchroniseren.")
+      }
+    }
+
+    const recipesForSharedSync = selectedRecipeObjects.map((recipe) =>
+      mergeRecipeForSharedSync(recipe, sharedSelectedRecipesById.get(recipe.id))
+    )
+
+    if (recipesForSharedSync.length > 0) {
+      await Promise.all(
+        recipesForSharedSync.map((recipe) => updateRecipeInHousehold(recipe, householdId))
+      )
+    }
+
+    if (selectedGroceries.length > 0) {
+      await uploadGroceriesToHousehold(
+        selectedGroceries.map((grocery) => ({ ...grocery, enabled: true })),
+        householdId
+      )
+    }
+
     const result = await syncActiveShoppingList({
       householdId,
       userId: authData.user.id,
-      recipes,
-      selectedRecipeIds: selectedRecipes,
-      servingsOverride,
-      groceries
+      recipes: Array.from(mergedRecipesMap.values()),
+      selectedRecipeIds: mergedSelectedRecipeIds,
+      servingsOverride: mergedServingsOverride,
+      groceries: Array.from(mergedGroceriesMap.values())
     })
 
     const nextShoppingListData = await fetchActiveShoppingListData(householdId)
@@ -1268,7 +1420,7 @@ async function syncSharedShoppingListFromApp() {
       `Gedeelde boodschappenlijst bijgewerkt: ${result.recipeCount} recepten en ${result.groceryCount} overige boodschappen.`
     )
   } catch (error) {
-    setSharedShoppingListError(getSupabaseErrorMessage(error))
+    setSharedShoppingListError(getSharedShoppingSyncErrorMessage(error))
   } finally {
     setIsSharedShoppingListSyncing(false)
   }
@@ -1352,19 +1504,19 @@ function removeRecipeLocallyFromShoppingList(recipeId: string) {
   }))
 }
 
-async function removeRecipeEverywhere(recipeId: string) {
-  removeRecipeLocallyFromShoppingList(recipeId)
+async function removeRecipeFromSharedShoppingListOnly(recipeId: string) {
+  if (!sharedShoppingListPreview) {
+    setSharedShoppingListMessage("Het gedeelde recept is verwijderd.")
+    return
+  }
 
   setIsSharedShoppingListSyncing(true)
   setSharedShoppingListError("")
 
   try {
-    if (sharedShoppingListPreview) {
-      await removeRecipeFromShoppingList(sharedShoppingListPreview.id, recipeId)
-      await fetchSharedShoppingListPreview()
-    }
-
-    setSharedShoppingListMessage("Het recept is verwijderd.")
+    await removeRecipeFromShoppingList(sharedShoppingListPreview.id, recipeId)
+    await fetchSharedShoppingListPreview()
+    setSharedShoppingListMessage("Het gedeelde recept is verwijderd.")
   } catch (error) {
     setSharedShoppingListError(getSupabaseErrorMessage(error))
   } finally {
@@ -1389,6 +1541,70 @@ function disableIngredientLocally(recipeId: string, ingredientId: string) {
       }
     })
   }))
+}
+
+async function removeIngredientFromSharedOnly(recipeId: string, ingredientId: string) {
+  const recipeHouseholdId = syncSettings.recipeHouseholdId
+  const recipeForSupabase = sharedSelectedRecipesById.get(recipeId)
+
+  if (!recipeHouseholdId || !recipeForSupabase) {
+    setSharedShoppingListMessage("Het gedeelde ingrediënt is verwijderd.")
+    return
+  }
+
+  const updatedRecipe: Recipe = {
+    ...recipeForSupabase,
+    ingredients: recipeForSupabase.ingredients.map((ingredient) =>
+      ingredient.id !== ingredientId
+        ? ingredient
+        : { ...ingredient, enabled: false }
+    ),
+    updatedAt: getTimestamp()
+  }
+
+  setIsSharedShoppingListSyncing(true)
+  setSharedShoppingListError("")
+
+  try {
+    await updateRecipeInHousehold(updatedRecipe, recipeHouseholdId)
+    await fetchSharedShoppingListPreview()
+    setSharedShoppingListMessage("Het gedeelde ingrediënt is verwijderd.")
+  } catch (error) {
+    setSharedShoppingListError(getSupabaseErrorMessage(error))
+  } finally {
+    setIsSharedShoppingListSyncing(false)
+  }
+}
+
+function removeGroceryLocallyFromShoppingList(groceryId: string) {
+  setData((currentData) => ({
+    ...currentData,
+    groceries: currentData.groceries.map((grocery) =>
+      grocery.id !== groceryId
+        ? grocery
+        : { ...grocery, enabled: false, updatedAt: getTimestamp() }
+    )
+  }))
+}
+
+async function removeGroceryFromSharedOnly(groceryId: string) {
+  if (!sharedShoppingListPreview) {
+    setSharedShoppingListMessage("De gedeelde overige boodschap is verwijderd.")
+    return
+  }
+
+  setIsSharedShoppingListSyncing(true)
+  setSharedShoppingListError("")
+
+  try {
+    await removeGroceriesFromShoppingList(sharedShoppingListPreview.id, [groceryId])
+    await fetchSharedShoppingListPreview()
+    setSharedShoppingListMessage("De gedeelde overige boodschap is verwijderd.")
+  } catch (error) {
+    setSharedShoppingListError(getSupabaseErrorMessage(error))
+  } finally {
+    setIsSharedShoppingListSyncing(false)
+  }
 }
 
 async function removeIngredientEverywhere(recipeId: string, ingredientId: string) {
@@ -1420,37 +1636,13 @@ async function removeIngredientEverywhere(recipeId: string, ingredientId: string
 
   try {
     await updateRecipeInHousehold(updatedRecipe, recipeHouseholdId)
-
-    setSharedShoppingListData((current) =>
-      current
-        ? {
-            ...current,
-            recipes: current.recipes.map((recipe) =>
-              recipe.id !== recipeId
-                ? recipe
-                : updatedRecipe
-            )
-          }
-        : current
-    )
-
+    await fetchSharedShoppingListPreview()
     setSharedShoppingListMessage("Het ingrediënt is verwijderd.")
   } catch (error) {
     setSharedShoppingListError(getSupabaseErrorMessage(error))
   } finally {
     setIsSharedShoppingListSyncing(false)
   }
-}
-
-function removeGroceryLocallyFromShoppingList(groceryId: string) {
-  setData((currentData) => ({
-    ...currentData,
-    groceries: currentData.groceries.map((grocery) =>
-      grocery.id !== groceryId
-        ? grocery
-        : { ...grocery, enabled: false, updatedAt: getTimestamp() }
-    )
-  }))
 }
 
 async function removeGroceriesEverywhere(groceryIds: string[]) {
@@ -2065,6 +2257,14 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
                   <span className="overview-dot overview-dot-shared" />
                   alleen in gedeelde lijst
                 </span>
+                <span className="overview-legend-item">
+                  <span className="overview-dot overview-dot-mixed" />
+                  deels lokaal en deels gedeelde lijst
+                </span>
+                <span className="overview-legend-item">
+                  <span className="overview-star" aria-hidden="true">*</span>
+                  afwijkende hoeveelheid
+                </span>
               </div>
             </div>
 
@@ -2075,103 +2275,155 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
                 <p className="muted-text">Er staan nog geen recepten in de lokale of gedeelde lijst.</p>
               )}
 
-              {shoppingOverviewRecipes.map(({ recipe, status, localRecipe, sharedRecipe, localServings, sharedServings, ingredients }) => (
+              {shoppingOverviewRecipes.map(({ recipe, symbolKind, hasStar, localRecipe, sharedRecipe, localServings, sharedServings, ingredients }) => (
                 <details key={recipe.id} className="overview-group">
                   <summary className="overview-group-summary">
                     <span className="overview-title-with-status">
                       <span>{recipe.name}</span>
-                      {status === "alleen lokaal" && (
-                        <span className="overview-dot overview-dot-local" />
-                      )}
-                      {status === "alleen gedeeld" && (
-                        <span className="overview-dot overview-dot-shared" />
-                      )}
+                      {renderOverviewSymbols(symbolKind, hasStar)}
                     </span>
                   </summary>
 
                   <div className="overview-group-content">
-                    <div className="overview-list-item">
-                      <span>Lokaal</span>
-                      <span className="import-recipe-meta">
-                        {localRecipe ? `${localServings ?? localRecipe.servings} personen` : "niet geselecteerd"}
-                      </span>
-                    </div>
+                    {localRecipe && (
+                      <div className="overview-list-item">
+                        <div>
+                          <div>Lokaal</div>
+                          <span className="import-recipe-meta">
+                            {localServings ?? localRecipe.servings} personen
+                          </span>
+                        </div>
 
-                    <div className="overview-list-item">
-                      <span>Gedeeld</span>
-                      <span className="import-recipe-meta">
-                        {sharedRecipe ? `${sharedServings ?? sharedRecipe.servings} personen` : "niet verwerkt"}
-                      </span>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRecipeLocallyFromShoppingList(recipe.id)}
+                          disabled={isSharedShoppingListSyncing}
+                        >
+                          Verwijder
+                        </button>
+                      </div>
+                    )}
 
-                    <div className="import-export-actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void removeRecipeEverywhere(recipe.id)
-                        }}
-                        disabled={isSharedShoppingListSyncing}
-                      >
-                        Verwijder
-                      </button>
-                    </div>
+                    {sharedRecipe && (
+                      <div className="overview-list-item">
+                        <div>
+                          <div>Gedeeld</div>
+                          <span className="import-recipe-meta">
+                            {sharedServings ?? sharedRecipe.servings} personen
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void removeRecipeFromSharedShoppingListOnly(recipe.id)
+                          }}
+                          disabled={isSharedShoppingListSyncing}
+                        >
+                          Verwijder
+                        </button>
+                      </div>
+                    )}
 
                     <div className="overview-section">
                       <h4>Ingrediënten</h4>
                       <ul className="overview-list">
-                        {ingredients.map(({ ingredient, status: ingredientStatus, localScaled, sharedScaled }) => (
+                        {ingredients.map(({ ingredient, localIngredient, sharedIngredient, localScaled, sharedScaled, localOnly, sharedOnly, directQuantityChanged, effectiveQuantityChanged }) => (
                           <li key={ingredient.id} className="overview-list-item">
                             <div>
                               <div>{ingredient.name}</div>
-                              <div className="import-recipe-meta">
-                                {localScaled && sharedScaled && (
-                                  localScaled.amount !== sharedScaled.amount ||
-                                  localScaled.unit !== sharedScaled.unit
-                                ) ? (
-                                  <>
-                                    <span className="overview-amount-previous">
-                                      {sharedScaled.amount} {sharedScaled.unit}
-                                    </span>
-                                    {" "}
-                                    <span>
-                                      {localScaled.amount} {localScaled.unit}
-                                    </span>
-                                  </>
-                                ) : localScaled ? (
-                                  <>
-                                    {localScaled.amount} {localScaled.unit}
-                                  </>
-                                ) : sharedScaled ? (
-                                  <>
-                                    {sharedScaled.amount} {sharedScaled.unit}
-                                  </>
-                                ) : (
-                                  <>
-                                    {ingredient.amount} {ingredient.unit}
-                                  </>
+                              {directQuantityChanged ? (
+                                <div className="overview-source-list">
+                                  {localIngredient && (
+                                    <div className="overview-source-row">
+                                      <span className="overview-title-with-status">
+                                        <span className="import-recipe-meta">Lokaal</span>
+                                        <span className="overview-star" aria-hidden="true">*</span>
+                                      </span>
+                                      <span className="import-recipe-meta">
+                                        {localScaled ? `${localScaled.amount} ${localScaled.unit}` : `${localIngredient.amount} ${localIngredient.unit}`} - {localIngredient.shelf}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => disableIngredientLocally(recipe.id, localIngredient.id)}
+                                        disabled={isSharedShoppingListSyncing}
+                                      >
+                                        Verwijder
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {sharedIngredient && (
+                                    <div className="overview-source-row">
+                                      <span className="overview-title-with-status">
+                                        <span className="import-recipe-meta">Gedeeld</span>
+                                        <span className="overview-star" aria-hidden="true">*</span>
+                                      </span>
+                                      <span className="import-recipe-meta">
+                                        {sharedScaled ? `${sharedScaled.amount} ${sharedScaled.unit}` : `${sharedIngredient.amount} ${sharedIngredient.unit}`} - {sharedIngredient.shelf}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          void removeIngredientFromSharedOnly(recipe.id, sharedIngredient.id)
+                                        }}
+                                        disabled={isSharedShoppingListSyncing}
+                                      >
+                                        Verwijder
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="import-recipe-meta">
+                                  {effectiveQuantityChanged && localScaled && sharedScaled ? (
+                                    <>
+                                      <span className="overview-amount-previous">
+                                        {sharedScaled.amount} {sharedScaled.unit}
+                                      </span>{" "}
+                                      <span>
+                                        {localScaled.amount} {localScaled.unit}
+                                      </span>
+                                      {" - "}
+                                      <span>{ingredient.shelf}</span>
+                                    </>
+                                  ) : localScaled ? (
+                                    <>{localScaled.amount} {localScaled.unit} - {ingredient.shelf}</>
+                                  ) : sharedScaled ? (
+                                    <>{sharedScaled.amount} {sharedScaled.unit} - {ingredient.shelf}</>
+                                  ) : (
+                                    <>{ingredient.amount} {ingredient.unit} - {ingredient.shelf}</>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            {!directQuantityChanged && (
+                              <div className="overview-inline-actions">
+                                {renderOverviewSymbols(
+                                  localOnly ? "local" : sharedOnly ? "shared" : null,
+                                  effectiveQuantityChanged
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (localOnly && localIngredient) {
+                                      disableIngredientLocally(recipe.id, localIngredient.id)
+                                      return
+                                    }
+
+                                    if (sharedOnly && sharedIngredient) {
+                                      void removeIngredientFromSharedOnly(recipe.id, sharedIngredient.id)
+                                      return
+                                    }
+
+                                    void removeIngredientEverywhere(recipe.id, ingredient.id)
+                                  }}
+                                  disabled={isSharedShoppingListSyncing}
+                                >
+                                  Verwijder
+                                </button>
                               </div>
-                            </div>
-
-                            <div className="overview-inline-actions">
-                              {ingredientStatus === "alleen lokaal" && (
-                                <span className="overview-dot overview-dot-local" />
-                              )}
-
-                              {ingredientStatus === "alleen gedeeld" && (
-                                <span className="overview-dot overview-dot-shared" />
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void removeIngredientEverywhere(recipe.id, ingredient.id)
-                                }}
-                                disabled={isSharedShoppingListSyncing}
-                              >
-                                Verwijder
-                              </button>
-                            </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -2193,11 +2445,15 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
                   <summary className="overview-group-summary">
                     <span className="overview-title-with-status">
                       <span>{categoryName} ({items.length})</span>
-                      {items.every((item) => item.status === "alleen lokaal") && (
-                        <span className="overview-dot overview-dot-local" />
-                      )}
-                      {items.every((item) => item.status === "alleen gedeeld") && (
-                        <span className="overview-dot overview-dot-shared" />
+                      {renderOverviewSymbols(
+                        items.some((item) => item.localOnly) && items.some((item) => item.sharedOnly)
+                          ? "mixed"
+                          : items.some((item) => item.localOnly)
+                            ? "local"
+                            : items.some((item) => item.sharedOnly)
+                              ? "shared"
+                              : null,
+                        items.some((item) => item.quantityChanged)
                       )}
                     </span>
                   </summary>
@@ -2220,92 +2476,83 @@ async function removeGroceriesEverywhere(groceryIds: string[]) {
                         <li key={item.grocery.id} className="overview-list-item">
                           <div>
                             <div>{item.grocery.name}</div>
-                            <div className="import-recipe-meta">
-                              {item.grocery.amount ?? 1} {item.grocery.unit ?? ""}
+                            {item.quantityChanged && item.localGrocery && item.sharedGrocery ? (
+                              <div className="overview-source-list">
+                                <div className="overview-source-row">
+                                  <span className="overview-title-with-status">
+                                    <span className="import-recipe-meta">Lokaal</span>
+                                    <span className="overview-star" aria-hidden="true">*</span>
+                                  </span>
+                                  <span className="import-recipe-meta">
+                                    {item.localGrocery.amount ?? 1} {item.localGrocery.unit ?? ""}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeGroceryLocallyFromShoppingList(item.localGrocery.id)}
+                                    disabled={isSharedShoppingListSyncing}
+                                  >
+                                    Verwijder
+                                  </button>
+                                </div>
+
+                                <div className="overview-source-row">
+                                  <span className="overview-title-with-status">
+                                    <span className="import-recipe-meta">Gedeeld</span>
+                                    <span className="overview-star" aria-hidden="true">*</span>
+                                  </span>
+                                  <span className="import-recipe-meta">
+                                    {item.sharedGrocery.amount ?? 1} {item.sharedGrocery.unit ?? ""}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void removeGroceryFromSharedOnly(item.sharedGrocery!.id)
+                                    }}
+                                    disabled={isSharedShoppingListSyncing}
+                                  >
+                                    Verwijder
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="import-recipe-meta">
+                                {item.grocery.amount ?? 1} {item.grocery.unit ?? ""}
+                              </div>
+                            )}
+                          </div>
+                          {!item.quantityChanged && (
+                            <div className="overview-inline-actions">
+                              {renderOverviewSymbols(
+                                item.localOnly ? "local" : item.sharedOnly ? "shared" : null,
+                                false
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (item.localOnly && item.localGrocery) {
+                                    removeGroceryLocallyFromShoppingList(item.localGrocery.id)
+                                    return
+                                  }
+
+                                  if (item.sharedOnly && item.sharedGrocery) {
+                                    void removeGroceryFromSharedOnly(item.sharedGrocery.id)
+                                    return
+                                  }
+
+                                  void removeGroceriesEverywhere([item.grocery.id])
+                                }}
+                                disabled={isSharedShoppingListSyncing}
+                              >
+                                Verwijder
+                              </button>
                             </div>
-                          </div>
-
-                          <div className="overview-inline-actions">
-                            {item.status === "alleen lokaal" && (
-                              <span className="overview-dot overview-dot-local" />
-                            )}
-
-                            {item.status === "alleen gedeeld" && (
-                              <span className="overview-dot overview-dot-shared" />
-                            )}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void removeGroceriesEverywhere([item.grocery.id])
-                              }}
-                              disabled={isSharedShoppingListSyncing}
-                            >
-                              Verwijder
-                            </button>
-                          </div>
+                          )}
                         </li>
                       ))}
                     </ul>
                   </div>
                 </details>
               ))}
-            </div>
-
-            <div className="overview-section">
-              <h4>Nog lokaal gewijzigd</h4>
-
-              {pendingRecipeChanges.length === 0 && pendingGroceryChanges.length === 0 && (
-                <p className="muted-text">
-                  Er zijn nu geen lokale wijzigingen die nog naar de gedeelde lijst moeten worden bijgewerkt.
-                </p>
-              )}
-
-              {pendingRecipeChanges.length > 0 && (
-                <div className="overview-section">
-                  <strong>Recepten ({pendingRecipeChanges.length})</strong>
-                  <ul className="overview-list">
-                    {pendingRecipeChanges.map(({ recipe, status, localServings, sharedServings }) => (
-                      <li key={recipe.id} className="overview-list-item">
-                        <div>
-                          <div>{recipe.name}</div>
-                          <div className="import-recipe-meta">
-                            {status === "alleen lokaal"
-                              ? `${localServings ?? recipe.servings} personen, nog niet gedeeld`
-                              : `lokaal ${localServings ?? recipe.servings} personen, gedeeld ${sharedServings ?? recipe.servings} personen`}
-                          </div>
-                        </div>
-
-                        <span className="import-recipe-badge changed">
-                          {status}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {pendingGroceryChanges.length > 0 && (
-                <div className="overview-section">
-                  <strong>Overige boodschappen ({pendingGroceryChanges.length})</strong>
-                  <ul className="overview-list">
-                    {pendingGroceryChanges.map(({ grocery, status, category }) => (
-                      <li key={grocery.id} className="overview-list-item">
-                        <div>
-                          <div>{grocery.name}</div>
-                          <div className="import-recipe-meta">
-                            {category} | {grocery.amount ?? 1} {grocery.unit ?? ""}
-                          </div>
-                        </div>
-
-                        <span className="import-recipe-badge changed">
-                          {status}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
 
           </div>

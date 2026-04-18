@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react"
 import { normalizeUnit } from "../utils/unitConversion"
 import { normalizeComparisonText } from "../utils/textNormalization"
 import type { Recipe, Grocery, Ingredient } from "../types"
@@ -24,83 +25,80 @@ function ShoppingList({
     selectedRecipes.includes(r.id)
   )
 
-  const combined: Record<string, Ingredient> = {}
+  const combined = useMemo(() => {
+    const nextCombined: Record<string, Ingredient> = {}
 
-  selectedRecipeList.forEach((recipe) => {
+    selectedRecipeList.forEach((recipe) => {
+      const baseServings = recipe.servings ?? 1
+      const servings = servingsOverride[recipe.id] ?? baseServings
+      const factor = servings / baseServings
 
-    const baseServings = recipe.servings ?? 1
-    const servings = servingsOverride[recipe.id] ?? baseServings
-    const factor = servings / baseServings
+      recipe.ingredients
+        .filter(i => i.enabled !== false)
+        .forEach((ingredient) => {
+          const scaledAmount = ingredient.amount * factor
+          const normalized = normalizeUnit(scaledAmount, ingredient.unit)
 
-    recipe.ingredients
-      .filter(i => i.enabled !== false)
-      .forEach((ingredient) => {
+          const amount = normalized.amount
+          const unit = normalized.unit
+          const shelf = ingredient.shelf ?? "overig"
 
-        const scaledAmount = ingredient.amount * factor
-        const normalized = normalizeUnit(scaledAmount, ingredient.unit)
+          const key = `${normalizeComparisonText(ingredient.name)}|${unit}|${shelf}`
 
+          if (!nextCombined[key]) {
+            nextCombined[key] = {
+              ...ingredient,
+              amount,
+              unit
+            }
+          } else {
+            nextCombined[key].amount += amount
+          }
+        })
+    })
+
+    groceries
+      .filter(g => g.enabled !== false)
+      .forEach((g) => {
+        const normalized = normalizeUnit(g.amount ?? 1, g.unit ?? "")
         const amount = normalized.amount
         const unit = normalized.unit
-        const shelf = ingredient.shelf ?? "overig"
+        const shelf = g.shelf ?? "overig"
+        const key = `${normalizeComparisonText(g.name)}|${unit}|${shelf}`
 
-        const key = `${normalizeComparisonText(ingredient.name)}|${unit}|${shelf}`
-
-        if (!combined[key]) {
-
-          combined[key] = {
-            ...ingredient,
+        if (!nextCombined[key]) {
+          nextCombined[key] = {
+            name: g.name,
             amount,
-            unit
+            unit,
+            shelf: g.shelf ?? "overig",
+            enabled: true
           }
-
         } else {
-
-          combined[key].amount += amount
-
+          nextCombined[key].amount += amount
         }
-
       })
 
-  })
-
-  // ✅ Overige boodschappen toevoegen aan dezelfde lijst
-  groceries
-  .filter(g => g.enabled !== false)
-  .forEach((g) => {
-    const normalized = normalizeUnit(g.amount ?? 1, g.unit ?? "")
-    const amount = normalized.amount
-    const unit = normalized.unit
-    const shelf = g.shelf ?? "overig"
-    const key = `${normalizeComparisonText(g.name)}|${unit}|${shelf}`
-
-    if (!combined[key]) {
-      combined[key] = {
-        name: g.name,
-        amount,
-        unit,
-        shelf: g.shelf ?? "overig",
-        enabled: true
-      }
-    } else {
-      combined[key].amount += amount
-    }
-  })
+    return nextCombined
+  }, [groceries, selectedRecipeList, servingsOverride])
 
 
   // ✅ Groeperen per schap
-  const grouped: Record<string, Ingredient[]> = {}
+  const grouped = useMemo(() => {
+    const nextGrouped: Record<string, Ingredient[]> = {}
 
-  Object.values(combined).forEach((ingredient) => {
+    Object.values(combined).forEach((ingredient) => {
+      const shelf = ingredient.shelf || "overig"
 
-    const shelf = ingredient.shelf || "overig"
+      if (!nextGrouped[shelf]) {
+        nextGrouped[shelf] = []
+      }
 
-    if (!grouped[shelf]) {
-      grouped[shelf] = []
-    }
+      nextGrouped[shelf].push(ingredient)
+    })
 
-    grouped[shelf].push(ingredient)
-
-  })
+    return nextGrouped
+  }, [combined])
 
   // ✅ Sorteren volgens route
   const sortedShelves = Object.keys(grouped).sort((a, b) => {
@@ -113,6 +111,43 @@ function ShoppingList({
 
     return ai - bi
   })
+
+  const shoppingListSignature = useMemo(
+    () =>
+      sortedShelves
+        .flatMap((shelf) =>
+          grouped[shelf].map(
+            (item) => `${shelf}|${normalizeComparisonText(item.name)}|${item.amount}|${item.unit}`
+          )
+        )
+        .join("||"),
+    [grouped, sortedShelves]
+  )
+
+  const [crossedOffState, setCrossedOffState] = useState<{
+    signature: string
+    items: Record<string, boolean>
+  }>({
+    signature: "",
+    items: {}
+  })
+
+  const crossedOffItems =
+    crossedOffState.signature === shoppingListSignature ? crossedOffState.items : {}
+
+  function toggleCrossedOff(key: string) {
+    setCrossedOffState((current) => {
+      const items = current.signature === shoppingListSignature ? current.items : {}
+
+      return {
+        signature: shoppingListSignature,
+        items: {
+          ...items,
+          [key]: !items[key]
+        }
+      }
+    })
+  }
 
   // ✅ Copy functie
   function copyList() {
@@ -147,13 +182,22 @@ function ShoppingList({
 
           <ul>
 
-            {grouped[shelf].map((item, i) => (
+            {grouped[shelf].map((item) => {
+              const itemKey = `${shelf}|${normalizeComparisonText(item.name)}|${item.amount}|${item.unit}`
+              const isCrossedOff = crossedOffItems[itemKey] === true
 
-              <li key={i}>
-                {item.name} — {item.amount} {item.unit}
+              return (
+              <li key={itemKey}>
+                <button
+                  type="button"
+                  className={`shopping-list-item ${isCrossedOff ? "crossed-off" : ""}`}
+                  onClick={() => toggleCrossedOff(itemKey)}
+                >
+                  {item.name} — {item.amount} {item.unit}
+                </button>
               </li>
-
-            ))}
+              )
+            })}
 
           </ul>
 

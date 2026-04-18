@@ -1,6 +1,33 @@
 import type { AppData, Grocery, Ingredient, Recipe, Supermarket, ThemeSettings, WeeklyPlanner } from "../types"
+import { SHELVES } from "../constants/shelves"
 
-export const APP_DATA_VERSION = 3
+export const APP_DATA_VERSION = 4
+
+function normalizeShelfName(rawShelf: string | undefined) {
+  const shelf = rawShelf?.trim() || "overig"
+
+  switch (shelf) {
+    case "ontbijt/zoet":
+      return "ontbijt/beleg"
+    case "vlees/vis":
+      return "vlees"
+    case "wereldkeuken mediterraans":
+      return "wereldkeuken"
+    default:
+      return SHELVES.includes(shelf) ? shelf : "overig"
+  }
+}
+
+function normalizeRoute(route: string[] | undefined) {
+  const normalized = (route ?? []).map(normalizeShelfName)
+  const seen = new Set<string>()
+
+  return [...normalized, ...SHELVES].filter((shelf) => {
+    if (seen.has(shelf)) return false
+    seen.add(shelf)
+    return true
+  })
+}
 
 function createEmptyWeeklyPlanner(): WeeklyPlanner {
   return {
@@ -42,7 +69,7 @@ function normalizeIngredient(rawIngredient: Partial<Ingredient> | undefined): In
     name: rawIngredient?.name ?? "",
     amount: rawIngredient?.amount ?? 1,
     unit: rawIngredient?.unit ?? "stuk",
-    shelf: rawIngredient?.shelf ?? "overig",
+    shelf: normalizeShelfName(rawIngredient?.shelf),
     enabled: rawIngredient?.enabled === false ? false : true
   }
 }
@@ -65,7 +92,7 @@ function normalizeGrocery(rawGrocery: Partial<Grocery> | undefined): Grocery {
     name: rawGrocery?.name ?? "",
     amount: rawGrocery?.amount ?? 1,
     unit: rawGrocery?.unit ?? "stuk",
-    shelf: rawGrocery?.shelf ?? "overig",
+    shelf: normalizeShelfName(rawGrocery?.shelf),
     enabled: rawGrocery?.enabled === false ? false : true,
     category: rawGrocery?.category?.trim() || undefined,
     updatedAt: rawGrocery?.updatedAt ?? getTimestamp()
@@ -76,7 +103,7 @@ function normalizeSupermarket(rawSupermarket: Partial<Supermarket> | undefined):
   return {
     id: rawSupermarket?.id ?? crypto.randomUUID(),
     name: rawSupermarket?.name ?? "",
-    route: rawSupermarket?.route ?? [],
+    route: normalizeRoute(rawSupermarket?.route),
     isFavorite: rawSupermarket?.isFavorite ?? false,
     updatedAt: rawSupermarket?.updatedAt ?? getTimestamp()
   }

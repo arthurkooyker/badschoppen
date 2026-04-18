@@ -601,6 +601,28 @@ function ImportExportPanel({
   const resolvedSupabaseGroceryCount = actionableGroceryEntries.filter(
     (entry) => supabaseGroceryChoices[entry.key]
   ).length
+
+  function selectTakeOverForAllRecipes() {
+    setSupabaseRecipeChoices(
+      Object.fromEntries(
+        actionableRecipeEntries.map((entry) => [
+          entry.key,
+          entry.status === "nieuw" ? "take-over" : "take-supabase"
+        ])
+      ) as Record<string, RecipeSupabaseChoice>
+    )
+  }
+
+  function selectTakeOverForAllGroceries() {
+    setSupabaseGroceryChoices(
+      Object.fromEntries(
+        actionableGroceryEntries.map((entry) => [
+          entry.key,
+          entry.status === "nieuw" ? "take-over" : "take-supabase"
+        ])
+      ) as Record<string, GrocerySupabaseChoice>
+    )
+  }
   const identicalImportCount = importedRecipes.filter((recipe) => {
     const localRecipe = localRecipesById.get(recipe.id)
 
@@ -1431,6 +1453,14 @@ function ImportExportPanel({
                       <span className="import-apply-hint">
                         Keuzes gemaakt: {resolvedSupabaseRecipeCount} / {actionableRecipeEntries.length}
                       </span>
+                      {actionableRecipeEntries.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={selectTakeOverForAllRecipes}
+                        >
+                          Neem alles over
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -1904,6 +1934,14 @@ function ImportExportPanel({
                   <span className="import-apply-hint">
                     Keuzes gemaakt: {resolvedSupabaseGroceryCount} / {actionableGroceryEntries.length}
                   </span>
+                  {actionableGroceryEntries.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={selectTakeOverForAllGroceries}
+                    >
+                      Neem alles over
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
